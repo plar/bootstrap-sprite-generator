@@ -38,6 +38,9 @@ class SpriteGenerator(object):
         #.icon-%(name)-26s { background-position: %(ox)spx %(oy)spx; }
         #
         """
+        
+    align_hor_to_int = {'left': -1, 'center': 0, 'right': 1} 
+    align_ver_to_int = {'top': -1, 'center': 0, 'bottom': 1} 
     
     def __init__(self, options, filter, filter_type):
         super(SpriteGenerator, self).__init__()
@@ -49,7 +52,8 @@ class SpriteGenerator(object):
         self._icon_dir = options.icon_dir if options.icon_dir else filter.default_icon_dir 
         self._output_dir = options.output_dir if options.output_dir else filter.default_output_dir
         self._resize = options.resize
-
+        self._align_hor = options.align_hor
+        self._align_ver = options.align_ver
         
     def run(self):
         # load icons of specific _options.type from _options.icon_dir
@@ -77,9 +81,6 @@ class SpriteGenerator(object):
             fimg = open("%s/%s" % (self._icon_dir, file), "rb")
             img = Image.open(fimg)
             img.load() # force load image
-            if self._resize:
-                img = img.copy()
-                img.thumbnail((self._resize, self._resize), Image.ANTIALIAS)
 
             (w, h) = img.size
             if w > max_width:
@@ -97,11 +98,35 @@ class SpriteGenerator(object):
             icons[icon_name] = dict(icon_name=icon_name, file_name=file, image=img, width=w, height=h)
             
             fimg.close()
-                    
-        print "Total icons(%s): %d" % (self._icon_type, len(icons))
-        print "Tile size: %dpx x %spx" % (max_width, max_height)
+            
+        print "Total icons: %d" % (len(icons))
+
+        print "Max icon size: %dpx x %spx" % (max_width, max_height)
+        if self._resize:
+            max_width = max_height = self._resize
+            for (unused, icon) in icons.items():
+                img = icon['image']
+                
+                (w, h) = img.size
+                img = img.copy()
+                img.thumbnail((self._resize, self._resize), Image.ANTIALIAS)
+                (w, h) = img.size
+                icon['image'] = img
+                icon['width'] = w
+                icon['height'] = h
+            print "Resized tile size: %dpx x %spx" % (max_width, max_height)
+        else:        
+            print "Tile size: %dpx x %spx" % (max_width, max_height)
     
         return (icons, max_width, max_height)
+    
+    def _align(self, icon_size, max_size, align_type):
+        if align_type == -1:    # left
+            return 0
+        if align_type == 0:     # center
+            return (max_size - icon_size) >> 1 
+        elif align_type == 1:   # right
+            return max_size - icon_size
 
     def _generate_sprite_image(self, icons, max_width, max_height):
         s = math.sqrt(len(icons))
@@ -125,8 +150,8 @@ class SpriteGenerator(object):
             icon['location'] = (ix, iy) # we need it for _less generation
             
             # adjust icon
-            cx = (max_width - icon['width']) >> 1
-            cy = (max_height - icon['height']) >> 1
+            cx = self._align(icon['width'], max_width, self.align_hor_to_int[self._align_hor])
+            cy = self._align(icon['height'], max_height, self.align_ver_to_int[self._align_ver])
             
             location = (ix + cx, iy + cy) 
             sprite.paste(icon['image'], location)
@@ -177,6 +202,8 @@ def main():
     parser.add_argument('-d', dest='icon_dir', help="icon files directory")
     parser.add_argument('-o', dest='output_dir', help="result files directory. if directory does not exist, it will be created automatically.")
     parser.add_argument('-r', dest='resize', help="resize original library icons to specific size(pixels)", default=None, type=int)
+    parser.add_argument('-ah', dest='align_hor', help="align horizontally inside tile", choices=("left", "center", "right"), default="center")
+    parser.add_argument('-av', dest='align_ver', help="align vertically inside tile", choices=("top", "center", "bottom"), default="center")
     parser.add_argument('-m', action='append', dest='adjust_map', help="adjust icon name for specific file. It option can be used multiply times. ie: -m glyphicons_079_signal.png:signal-strength")
     
     # prepare type argument
